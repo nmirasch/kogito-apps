@@ -1,7 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
-
+const webpack = require('webpack');
 const BG_IMAGES_DIRNAME = 'bgimages';
 
 module.exports = {
@@ -38,7 +38,8 @@ module.exports = {
           ),
           path.resolve(
             '../../node_modules/@patternfly/patternfly/assets/pficon'
-          )
+          ),
+          path.resolve('./src/static')
         ],
         test: /\.(svg|ttf|eot|woff|woff2)$/,
         use: {
@@ -123,12 +124,20 @@ module.exports = {
   },
   output: {
     filename: '[name].bundle.js',
-    path: path.resolve(__dirname, 'dist')
+    path: path.resolve(__dirname, 'dist'),
+    publicPath: '/'
   },
   plugins: [
     new HtmlWebpackPlugin({
       favicon: 'src/favicon.ico',
       template: path.resolve(__dirname, 'src', 'index.html')
+    }),
+    new webpack.EnvironmentPlugin({
+        KOGITO_AUTH_ENABLED:  false,
+        KOGITO_KEYCLOAK_REALM: "kogito",
+        KOGITO_KEYCLOAK_URL: "http://localhost:8280",
+        KOGITO_KEYCLOAK_CLIENT_ID: "kogito-management-console",
+        KOGITO_DATAINDEX_HTTP_URL:  "http://localhost:4000"
     })
   ],
   resolve: {

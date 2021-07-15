@@ -22,6 +22,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -30,10 +31,13 @@ import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 
 import org.kie.kogito.index.DataIndexStorageService;
+import org.kie.kogito.index.api.DataIndexApi;
 import org.kie.kogito.index.graphql.query.GraphQLQueryOrderByParser;
 import org.kie.kogito.index.graphql.query.GraphQLQueryParserRegistry;
 import org.kie.kogito.index.json.DataIndexParsingException;
 import org.kie.kogito.index.model.Job;
+import org.kie.kogito.index.model.Node;
+import org.kie.kogito.index.model.NodeInstance;
 import org.kie.kogito.index.model.ProcessInstance;
 import org.kie.kogito.index.model.ProcessInstanceState;
 import org.kie.kogito.index.model.UserTaskInstance;
@@ -79,6 +83,9 @@ public class GraphQLSchemaManager {
     @Inject
     GraphQLScalarType qlDateTimeScalarType;
 
+    @Inject
+    DataIndexApi dataIndexApiExecutor;
+
     private GraphQLSchema schema;
 
     @PostConstruct
@@ -102,12 +109,20 @@ public class GraphQLSchemaManager {
                     builder.dataFetcher("ProcessInstances", this::getProcessInstancesValues);
                     builder.dataFetcher("UserTaskInstances", this::getUserTaskInstancesValues);
                     builder.dataFetcher("Jobs", this::getJobsValues);
+                    builder.dataFetcher("GetProcessInstanceNodes", this::getProcessInstanceNodes);
+                    return builder;
+                })
+                .type("Mutation", builder -> {
+                    builder.dataFetcher("ProcessInstanceAbort", this::abortProcessInstance);
+                    builder.dataFetcher("ProcessInstanceRetry", this::retryProcessInstance);
                     return builder;
                 })
                 .type("ProcessInstance", builder -> {
                     builder.dataFetcher("parentProcessInstance", this::getParentProcessInstanceValue);
                     builder.dataFetcher("childProcessInstances", this::getChildProcessInstancesValues);
                     builder.dataFetcher("serviceUrl", this::getProcessInstanceServiceUrl);
+                    builder.dataFetcher("diagram", this::getProcessInstanceDiagram);
+                    builder.dataFetcher("availableNodes", this::getProcessNodes);
                     return builder;
                 })
                 .type("ProcessInstanceMeta", builder -> {
@@ -132,6 +147,31 @@ public class GraphQLSchemaManager {
 
         SchemaGenerator schemaGenerator = new SchemaGenerator();
         return schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
+    }
+
+    public CompletableFuture<String> abortProcessInstance(DataFetchingEnvironment env) {
+        ProcessInstance processInstance = cacheService.getProcessInstancesCache().get(env.getArgument("id"));
+        return dataIndexApiExecutor.abortProcessInstance(getServiceUrl(processInstance.getEndpoint(), processInstance.getProcessId()), processInstance);
+    }
+
+    public CompletableFuture<String> retryProcessInstance(DataFetchingEnvironment env) {
+        ProcessInstance processInstance = cacheService.getProcessInstancesCache().get(env.getArgument("id"));
+        return dataIndexApiExecutor.retryProcessInstance(getServiceUrl(processInstance.getEndpoint(), processInstance.getProcessId()), processInstance);
+    }
+
+    public CompletableFuture getProcessInstanceDiagram(DataFetchingEnvironment env) {
+        ProcessInstance processInstance = env.getSource();
+        return dataIndexApiExecutor.getProcessInstanceDiagram(getServiceUrl(processInstance.getEndpoint(), processInstance.getProcessId()), processInstance);
+    }
+
+    public CompletableFuture<List<NodeInstance>> getProcessInstanceNodes(DataFetchingEnvironment env) {
+        ProcessInstance processInstance = cacheService.getProcessInstancesCache().get(env.getArgument("id"));
+        return dataIndexApiExecutor.getProcessInstanceNodes(getServiceUrl(processInstance.getEndpoint(), processInstance.getProcessId()), processInstance);
+    }
+
+    public CompletableFuture<List<Node>> getProcessNodes(DataFetchingEnvironment env) {
+        ProcessInstance processInstance = env.getSource();
+        return dataIndexApiExecutor.getProcessInstanceAvailableNodes(getServiceUrl(processInstance.getEndpoint(), processInstance.getProcessId()), processInstance);
     }
 
     protected String getProcessInstanceServiceUrl(DataFetchingEnvironment env) {
@@ -287,5 +327,9 @@ public class GraphQLSchemaManager {
 
     public void transform(Consumer<GraphQLSchema.Builder> builder) {
         schema = schema.transform(builder);
+    }
+
+    public void setDataIndexApiExecutor(DataIndexApi dataIndexApiExecutor) {
+        this.dataIndexApiExecutor = dataIndexApiExecutor;
     }
 }

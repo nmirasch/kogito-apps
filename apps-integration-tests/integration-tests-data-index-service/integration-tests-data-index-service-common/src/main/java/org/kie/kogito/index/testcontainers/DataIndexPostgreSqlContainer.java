@@ -20,7 +20,7 @@ package org.kie.kogito.index.testcontainers;
  * This container wraps Data Index Service container
  */
 public class DataIndexPostgreSqlContainer extends AbstractDataIndexContainer {
-
+    public static final String DATA_INDEX_BLOCKING = "kogito.data-index.blocking";
     public static final String NAME = "data-index-service-postgresql";
 
     public DataIndexPostgreSqlContainer() {
